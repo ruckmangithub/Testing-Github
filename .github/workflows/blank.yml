@@ -32,11 +32,11 @@ jobs:
             deployment-gate: '{"environment":"deploy-gates-demo","jobName":"Deploy"}'
         - name: Output of Change Creation
           run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }}" >> $GITHUB_OUTPUT
-  #Prod:
-  #    name: 'Prod'
-  #    needs: 'Deploy'
-  #    environment: deploy-gates-demo
-  #    runs-on: ubuntu-latest
-  #    steps:
-  #    - name: Prod
-  #      run: echo "Prod"
+  Prod:
+      name: 'Prod'
+      needs: 'Deploy'
+      environment: deploy-gates-demo
+      runs-on: ubuntu-latest
+      steps:
+      - name: Prod
+        run: echo "Prod"
