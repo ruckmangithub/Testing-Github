@@ -2,8 +2,16 @@ name: blank
 on:
   workflow_dispatch:
 jobs:
+  TestingJob:
+      name: TestingJob
+      runs-on: ubuntu-latest
+      steps:
+      - name: TestingJob
+        run: echo "Testing Job"
+      
   Deploy:
       name: Deploy to Prod
+      needs: TestingJob
       runs-on: ubuntu-latest
       steps:     
         - name: ServiceNow Change
