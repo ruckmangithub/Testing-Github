@@ -1,0 +1,35 @@
+name: blank
+on:
+  workflow_dispatch:
+jobs:
+  TestingJob:
+      name: TestingJob
+      runs-on: ubuntu-latest
+      steps:
+      - name: TestingJob
+        run: echo "Testing Job"
+      
+  deploy:
+    name: Deploy
+    needs: TestingJob
+    runs-on: ubuntu-latest
+    steps:     
+      - name: ServiceNow Get Change
+        uses: ServiceNow/servicenow-devops-get-change@v3.1.0
+        with:
+          devops-integration-user-name: ${{ secrets.SN_DEVOPS_USER }}
+          devops-integration-user-password: ${{ secrets.SN_DEVOPS_PASSWORD }}
+          instance-url: ${{ secrets.SN_INSTANCE_URL_ADEVOPS2 }}
+          tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID_ADEVOPS2 }}
+          context-github: ${{ toJSON(github) }}
+          change-details: '{"number":"CHG0030064"}'
+        
+        
+  #Prod:
+  #    name: 'Prod'
+  #    needs: 'Deploy'
+  #    environment: deploy-gates-demo
+  #    runs-on: ubuntu-latest
+  #    steps:
+  #    - name: Prod
+  #      run: echo "Prod"
