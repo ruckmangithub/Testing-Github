@@ -44,11 +44,11 @@ jobs:
         uses: ServiceNow/servicenow-devops-change@v4.0.0
         id: create
         with:
-          devops-integration-token: AxgNabNd3prhZX5tZuuGizh4EEJMeMHZ
-          instance-url: https://virtevademo9.service-now.com
-          tool-id: 2caff0f11bcc125028cba9bd2a4bcbe8
+          devops-integration-token: "AxgNabNd3prhZX5tZuuGizh4EEJMeMHZ"
+          instance-url: "https://virtevademo9.service-now.com"
+          tool-id: "2caff0f11bcc125028cba9bd2a4bcbe8"
           context-github: ${{ toJSON(github) }}
-          job-name: Deploy
+          job-name: "Deploy"
           change-request: '{"chg_model":{"name":"DevOps"},"setCloseCode":"true","autoCloseChange":true,"attributes":{"short_description":"Automated Software Deployment","description":"Automated Software Deployment.","implementation_plan":"Software update is tested and results can be found in Test Summaries Tab; When the change is approved the implementation happens automated by the CICD pipeline within the change planned start and end time window.","backout_plan":"When software fails in production, the previous software release will be re-deployed.","test_plan":"Testing if the software was successfully deployed"}}'
           #interval: '100'
           #timeout: '3600'
