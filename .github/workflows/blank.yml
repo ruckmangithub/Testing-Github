@@ -32,12 +32,3 @@ jobs:
             deployment-gate: '{"environment":"deploy-gates-demo","jobName":"Deploy"}'
         - name: Output of Change Creation
           run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }}" >> $GITHUB_OUTPUT
-  deployments:
-  runs-on: ubuntu-latest
-    deploymentGating:
-      enabled: true # to enable the feature
-      retry: 50 # run poll action 50 times
-      sleep: 30 # wait 30 seconds between each poll
-      environments: # select the environments you'd like to use with this feature
-      - Development
-      - Production
