@@ -16,6 +16,7 @@ jobs:
       steps:     
         - name: ServiceNow DevOps Change Automation
           uses: ServiceNow/servicenow-devops-change@v4.1.0
+          id: create
           with:
             devops-integration-user-name: ${{ secrets.SN_DEVOPS_USER }}
             devops-integration-user-password: ${{ secrets.SN_DEVOPS_PASSWORD }}
@@ -29,6 +30,6 @@ jobs:
             changeCreationTimeOut: '3600'
             abortOnChangeCreationFailure: true
             abortOnChangeStepTimeout: true
-            deployment-gate: '{"environment":"deploy-gates-demo","jobName":"Deploy"}'
+            #deployment-gate: '{"environment":"deploy-gates-demo","jobName":"Deploy"}'
         - name: Output of Change Creation
           run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }}" >> $GITHUB_OUTPUT
