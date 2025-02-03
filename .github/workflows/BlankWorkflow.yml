@@ -1,60 +1,7 @@
 name: BlankWorkflow
 on:
   workflow_dispatch:
-    - name: Interactive Inputs
-    # You may pin to the exact commit or the version.
-    # uses: boasiHQ/interactive-inputs@a3091457e2a478f90be611c8f7d363f984cdbb3a
-    uses: boasiHQ/interactive-inputs@v2.4.0
-    with:
-      # The title of the interactive inputs form
-      title: # optional
-      # The representation (in yaml) of fields to be displayed
-      interactive: # default is fields:
-    - label: requested-files
-      properties:
-        display: Upload desired files
-        type: multifile
-        required: true
-        description: Upload desired files that are to be uploaded to the runner for processing
-    - label: random-string
-      properties:
-        display: Enter a random string
-        type: text
-        description: A random string up to 20 characters long
-        maxLength: 20
-        required: false
-    - label: choice
-      properties:
-        display: Select a monitoring tool
-        type: select
-        description: Available options to chose from
-        choices: ["datadog", "sentry", "grafana"]
-        required: true
-  
-      # The timeout in seconds for the interactive inputs form
-      timeout: # optional, default is 300
-      # The authtoken for ngrok used to expose the interactive inputs form
-      ngrok-authtoken: 
-      # The token used to authenticate with GitHub API
-      github-token: # default is ${{ github.token }}
-      # Whether to send a notification to Slack about the status of the interative inputs form
-      notifier-slack-enabled: # default is false
-      # The timestamp of the message to reply to in the thread
-      notifier-slack-thread-ts: # optional
-      # The token used to authenticate with Slack API
-      notifier-slack-token: # default is xoxb-secret-token
-      # The channel to send the notification to
-      notifier-slack-channel: # default is #notificaitons
-      # The name of the bot to send the notification as
-      notifier-slack-bot: # optional
-      # Whether to send a notification to Discord about the status of the interative inputs form
-      notifier-discord-enabled: # default is false
-      # The ID of the Discord thread the message should be sent to
-      notifier-discord-thread-id: # optional
-      # The webhook URL used to send the notification(s) to Discord
-      notifier-discord-webhook: # default is secret-webhook
-      # The username to send the notification(s) as
-      notifier-discord-username: # optional
+    
           
           
 jobs:
