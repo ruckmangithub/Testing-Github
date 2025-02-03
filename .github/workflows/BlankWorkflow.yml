@@ -1,6 +1,11 @@
 name: BlankWorkflow
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Define env name'     
+        required: true
+        default: 'prod'
 jobs:
   TestingJob:
       name: TestingJob
