@@ -1,7 +1,15 @@
 name: BlankWorkflow
 on:
   workflow_dispatch:
-    
+    inputs:
+      name:
+        type: choice
+        description: Who to greet
+        options: 
+        - monalisa
+        - cschleiden
+      message:
+        required: true
           
           
 jobs:
