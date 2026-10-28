@@ -1,47 +1,65 @@
 name: BlankWorkflow
+
 on:
   workflow_dispatch:
     inputs:
       name:
         type: choice
         description: Who to greet
-        options: 
-        - monalisa
-        - cschleiden
+        options:
+          - monalisa
+          - cschleiden
       message:
         required: true
-          
-          
+
 jobs:
-  TestingJob:
-      name: TestingJob
-      runs-on: ubuntu-latest
-      steps:
-      - name: TestingJob
-        run: echo "Testing Job"
-      
+  AutomatedTests:
+    name: Automated Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dummy unit tests
+        run: |
+          echo "Running demo unit tests..."
+          echo "PASS: login test"
+          echo "PASS: API test"
+          echo "PASS: deployment validation test"
+
+      - name: Dummy integration tests
+        run: |
+          echo "Running demo integration tests..."
+          echo "PASS: ServiceNow integration test"
+          echo "All automated tests passed."
+
+  RunnerApproval:
+    name: Pipeline Runner Approval
+    needs: AutomatedTests
+    runs-on: ubuntu-latest
+    environment:
+      name: pipeline-runner-approval
+    steps:
+      - name: Record pipeline initiator
+        run: echo "Pipeline initiated by ${{ github.actor }}"
+
   ProdDeploy:
-      name: ProdDeploy
-      needs: TestingJob
-      runs-on: ubuntu-latest
-      steps:     
-        - name: ServiceNow DevOps Change Automation
-          uses: ServiceNow/servicenow-devops-change@v5.1.0
-          id: create
-          with:
-            #devops-integration-user-name: ${{ secrets.SN_DEVOPS_USER }}
-            #devops-integration-user-password: ${{ secrets.SN_DEVOPS_PASSWORD }}
-            instance-url: ${{ secrets.SN_INSTANCE_URL_ADEVOPS2 }}
-            tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID_ADEVOPS2 }}
-            devops-integration-token: ${{ secrets.SN_DEVOPS_TOKEN }}
-            context-github: ${{ toJSON(github) }}
-            job-name: 'ProdDeploy'
-            change-request: '{"setCloseCode":"true","autoCloseChange":true,"attributes":{"requested_by": {"email": "abel.tuter@example.com"},"assignment_group":"b85d44954a3623120004689b2d5dd60a","short_description":"Automated Software Deployment","description":"Automated Software Deployment.","implementation_plan":"Software update is tested and results can be found in Test Summaries Tab; When the change is approved the implementation happens automated by the CICD pipeline within the change planned start and end time window.","backout_plan":"When software fails in production, the previous software release will be re-deployed.","test_plan":"Testing if the software was successfully deployed"}}'
-            interval: '100'
-            timeout: '3600'
-            changeCreationTimeOut: '3600'
-            abortOnChangeCreationFailure: true
-            abortOnChangeStepTimeout: true
-            #deployment-gate: '{"environment":"deploy-gates-demo","jobName":"ProdDeploy"}'
-        - name: Output of Change Creation
-          run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }}" >> $GITHUB_OUTPUT
+    name: ProdDeploy
+    needs: RunnerApproval
+    runs-on: ubuntu-latest
+    steps:
+      - name: ServiceNow DevOps Change Automation
+        uses: ServiceNow/servicenow-devops-change@v5.1.0
+        id: create
+        with:
+          instance-url: ${{ secrets.SN_INSTANCE_URL_ADEVOPS2 }}
+          tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID_ADEVOPS2 }}
+          devops-integration-token: ${{ secrets.SN_DEVOPS_TOKEN }}
+          context-github: ${{ toJSON(github) }}
+          job-name: 'ProdDeploy'
+          change-request: '{"setCloseCode":"true","autoCloseChange":true,"attributes":{"requested_by":{"email":"${{ github.actor }}@example.com"},"assignment_group":"b85d44954a3623120004689b2d5dd60a","short_description":"Automated Software Deployment Demo","description":"Demo deployment initiated by GitHub actor ${{ github.actor }} after automated tests and approval.","implementation_plan":"Software update is tested and results can be found in Test Summaries Tab; when the change is approved the implementation happens automatically by the CICD pipeline within the planned change window.","backout_plan":"When software fails in production, the previous software release will be re-deployed.","test_plan":"Dummy automated unit and integration tests execute before approval and production deployment."}}'
+          interval: '100'
+          timeout: '3600'
+          changeCreationTimeOut: '3600'
+          abortOnChangeCreationFailure: true
+          abortOnChangeStepTimeout: true
+
+      - name: Output of Change Creation
+        run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }}" >> "$GITHUB_OUTPUT"
