@@ -1,5 +1,4 @@
 name: BlankWorkflow
-
 on:
   workflow_dispatch:
     inputs:
@@ -10,40 +9,63 @@ on:
           - monalisa
           - cschleiden
       message:
+        description: Message for the run
         required: true
+      requested_by_email:
+        description: ServiceNow user email for Requested by (must exist in ServiceNow)
+        required: true
+        default: abel.tuter@example.com
 
 jobs:
-  AutomatedTests:
-    name: Automated Tests
+  TestingJob:
+    name: TestingJob
     runs-on: ubuntu-latest
     steps:
-      - name: Dummy unit tests
+      - name: Run dummy automated tests
         run: |
-          echo "Running demo unit tests..."
-          echo "PASS: login test"
-          echo "PASS: API test"
-          echo "PASS: deployment validation test"
+          mkdir -p test-results
+          cat > test-results/junit-results.xml <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites name="DemoTestSuite" tests="5" failures="0" errors="0" skipped="0" time="4.20">
+            <testsuite name="DemoUnitTests" tests="3" failures="0" errors="0" skipped="0" time="1.50">
+              <testcase classname="demo.LoginTests" name="test_user_can_log_in" time="0.40"/>
+              <testcase classname="demo.ApiTests" name="test_api_returns_200" time="0.60"/>
+              <testcase classname="demo.ApiTests" name="test_payload_schema_valid" time="0.50"/>
+            </testsuite>
+            <testsuite name="DemoIntegrationTests" tests="2" failures="0" errors="0" skipped="0" time="2.70">
+              <testcase classname="demo.IntegrationTests" name="test_servicenow_connectivity" time="1.20"/>
+              <testcase classname="demo.IntegrationTests" name="test_deployment_package_valid" time="1.50"/>
+            </testsuite>
+          </testsuites>
+          XML
+          echo "5 tests executed, 5 passed"
 
-      - name: Dummy integration tests
-        run: |
-          echo "Running demo integration tests..."
-          echo "PASS: ServiceNow integration test"
-          echo "All automated tests passed."
+      - name: ServiceNow DevOps Unit Test Results
+        uses: ServiceNow/servicenow-devops-test-report@v6.0.0
+        with:
+          instance-url: ${{ secrets.SN_INSTANCE_URL_ADEVOPS2 }}
+          tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID_ADEVOPS2 }}
+          devops-integration-token: ${{ secrets.SN_DEVOPS_TOKEN }}
+          context-github: ${{ toJSON(github) }}
+          job-name: 'TestingJob'
+          xml-report-filename: test-results/junit-results.xml
+          test-summary-name: 'DemoTestSummary'
 
   RunnerApproval:
-    name: Pipeline Runner Approval
-    needs: AutomatedTests
+    name: RunnerApproval
+    needs: TestingJob
     runs-on: ubuntu-latest
-    environment:
-      name: pipeline-runner-approval
+    environment: pipeline-runner-approval
     steps:
-      - name: Record pipeline initiator
-        run: echo "Pipeline initiated by ${{ github.actor }}"
+      - name: Approval recorded
+        run: echo "Run started by ${{ github.actor }} and approved to proceed to change creation"
 
   ProdDeploy:
     name: ProdDeploy
     needs: RunnerApproval
     runs-on: ubuntu-latest
+    outputs:
+      change-request-number: ${{ steps.create.outputs.change-request-number }}
     steps:
       - name: ServiceNow DevOps Change Automation
         uses: ServiceNow/servicenow-devops-change@v5.1.0
@@ -54,7 +76,7 @@ jobs:
           devops-integration-token: ${{ secrets.SN_DEVOPS_TOKEN }}
           context-github: ${{ toJSON(github) }}
           job-name: 'ProdDeploy'
-          change-request: '{"setCloseCode":"true","autoCloseChange":true,"attributes":{"requested_by":{"email":"${{ github.actor }}@example.com"},"assignment_group":"b85d44954a3623120004689b2d5dd60a","short_description":"Automated Software Deployment Demo","description":"Demo deployment initiated by GitHub actor ${{ github.actor }} after automated tests and approval.","implementation_plan":"Software update is tested and results can be found in Test Summaries Tab; when the change is approved the implementation happens automatically by the CICD pipeline within the planned change window.","backout_plan":"When software fails in production, the previous software release will be re-deployed.","test_plan":"Dummy automated unit and integration tests execute before approval and production deployment."}}'
+          change-request: '{"setCloseCode":"true","autoCloseChange":true,"attributes":{"requested_by":{"email":"${{ inputs.requested_by_email }}"},"assignment_group":"b85d44954a3623120004689b2d5dd60a","short_description":"Automated Software Deployment","description":"Automated Software Deployment. Pipeline run by ${{ github.actor }}.","implementation_plan":"Software update is tested and results can be found in Test Summaries Tab; When the change is approved the implementation happens automated by the CICD pipeline within the change planned start and end time window.","backout_plan":"When software fails in production, the previous software release will be re-deployed.","test_plan":"Automated unit and integration tests run in TestingJob; results are attached in the Test Summaries tab."}}'
           interval: '100'
           timeout: '3600'
           changeCreationTimeOut: '3600'
@@ -62,4 +84,20 @@ jobs:
           abortOnChangeStepTimeout: true
 
       - name: Output of Change Creation
-        run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }}" >> "$GITHUB_OUTPUT"
+        run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }}"
+
+  FakeDeploy:
+    name: FakeDeploy
+    needs: ProdDeploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fake deployment
+        run: |
+          echo "Change ${{ needs.ProdDeploy.outputs.change-request-number }} approved - starting deployment"
+          echo "Downloading build artifact..."
+          sleep 3
+          echo "Deploying to production..."
+          sleep 5
+          echo "Running smoke tests..."
+          sleep 2
+          echo "Deployment completed successfully"
