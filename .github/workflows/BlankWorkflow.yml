@@ -15,21 +15,66 @@ on:
         description: ServiceNow user email for Requested by (must exist in ServiceNow)
         required: true
         default: abel.tuter@example.com
+env:
+  APP_NAME: demo-web-app
+  APP_VERSION: 1.0.${{ github.run_number }}
 jobs:
-  TestingJob:
-    name: TestingJob
+  Build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
-      - name: Run dummy automated tests
+      - name: Build and package demo-web-app
         run: |
+          mkdir -p build/app
+          cat > build/app/index.html <<HTML
+          <html><body><h1>${APP_NAME} v${APP_VERSION}</h1><p>Commit: ${GITHUB_SHA}</p></body></html>
+          HTML
+          cat > build/app/build-info.json <<JSON
+          {
+            "app": "${APP_NAME}",
+            "version": "${APP_VERSION}",
+            "commit": "${GITHUB_SHA}",
+            "branch": "${GITHUB_REF_NAME}",
+            "builtBy": "${GITHUB_ACTOR}",
+            "runId": "${GITHUB_RUN_ID}",
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          JSON
+          (cd build && zip -qr "../${APP_NAME}-${APP_VERSION}.zip" app)
+          sha256sum "${APP_NAME}-${APP_VERSION}.zip" > "${APP_NAME}-${APP_VERSION}.zip.sha256"
+          cat "${APP_NAME}-${APP_VERSION}.zip.sha256"
+      - name: Publish build artifact to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-${{ env.APP_VERSION }}
+          path: |
+            ${{ env.APP_NAME }}-${{ env.APP_VERSION }}.zip
+            ${{ env.APP_NAME }}-${{ env.APP_VERSION }}.zip.sha256
+          retention-days: 90
+      - name: Register artifact version in ServiceNow
+        uses: ServiceNow/servicenow-devops-register-artifact@v7.0.0
+        with:
+          instance-url: ${{ secrets.SN_INSTANCE_URL_ADEVOPS2 }}
+          tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID_ADEVOPS2 }}
+          devops-integration-token: ${{ secrets.SN_DEVOPS_TOKEN }}
+          context-github: ${{ toJSON(github) }}
+          job-name: 'Build'
+          artifacts: '[{"name": "${{ env.APP_NAME }}.zip", "version": "${{ env.APP_VERSION }}", "semanticVersion": "${{ env.APP_VERSION }}", "repositoryName": "${{ github.repository }}"}]'
+      - name: Run package integrity and integration tests
+        run: |
+          set -e
           mkdir -p test-results
-          cat > test-results/junit-results.xml <<'XML'
+          sha256sum -c "${APP_NAME}-${APP_VERSION}.zip.sha256"
+          unzip -qo "${APP_NAME}-${APP_VERSION}.zip" -d verify
+          test -f verify/app/index.html
+          jq -e ".version == \"${APP_VERSION}\"" verify/app/build-info.json > /dev/null
+          cat > test-results/junit-results.xml <<XML
           <?xml version="1.0" encoding="UTF-8"?>
-          <testsuites name="DemoTestSuite" tests="5" failures="0" errors="0" skipped="0" time="4.20">
-            <testsuite name="DemoUnitTests" tests="3" failures="0" errors="0" skipped="0" time="1.50">
-              <testcase classname="demo.LoginTests" name="test_user_can_log_in" time="0.40"/>
-              <testcase classname="demo.ApiTests" name="test_api_returns_200" time="0.60"/>
-              <testcase classname="demo.ApiTests" name="test_payload_schema_valid" time="0.50"/>
+          <testsuites name="${APP_NAME}-${APP_VERSION}" tests="5" failures="0" errors="0" skipped="0" time="4.20">
+            <testsuite name="PackageIntegrityTests" tests="3" failures="0" errors="0" skipped="0" time="1.50">
+              <testcase classname="package.Integrity" name="test_checksum_matches_build" time="0.40"/>
+              <testcase classname="package.Contents" name="test_index_page_present" time="0.60"/>
+              <testcase classname="package.Metadata" name="test_version_matches" time="0.50"/>
             </testsuite>
             <testsuite name="DemoIntegrationTests" tests="2" failures="0" errors="0" skipped="0" time="2.70">
               <testcase classname="demo.IntegrationTests" name="test_servicenow_connectivity" time="1.20"/>
@@ -38,32 +83,56 @@ jobs:
           </testsuites>
           XML
           echo "5 tests executed, 5 passed"
-      - name: ServiceNow DevOps Unit Test Results
+      - name: Publish test results to ServiceNow
         uses: ServiceNow/servicenow-devops-test-report@v6.0.0
         with:
           instance-url: ${{ secrets.SN_INSTANCE_URL_ADEVOPS2 }}
           tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID_ADEVOPS2 }}
           devops-integration-token: ${{ secrets.SN_DEVOPS_TOKEN }}
           context-github: ${{ toJSON(github) }}
-          job-name: 'TestingJob'
+          job-name: 'Build'
           xml-report-filename: test-results/junit-results.xml
           test-summary-name: 'DemoTestSummary'
-  RunnerApproval:
-    name: RunnerApproval
-    needs: TestingJob
+  ReleaseApproval:
+    name: ReleaseApproval
+    needs: Build
     runs-on: ubuntu-latest
     environment: pipeline-runner-approval
+    permissions:
+      actions: read
+    outputs:
+      approver: ${{ steps.approval.outputs.approver }}
+      approval-comment: ${{ steps.approval.outputs.comment }}
     steps:
-      - name: Approval recorded
-        run: echo "Run started by ${{ github.actor }} and approved to proceed to change creation"
-  ProdDeploy:
-    name: ProdDeploy
-    needs: RunnerApproval
+      - name: Record release approver and comments
+        id: approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APPROVAL=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/approvals" --jq '.[0] // {}')
+          APPROVER=$(echo "$APPROVAL" | jq -r '.user.login // "n/a"')
+          COMMENT=$(echo "$APPROVAL" | jq -r '.comment // "" | gsub("[\"\\\\\\n\\r]"; " ")')
+          echo "approver=$APPROVER" >> "$GITHUB_OUTPUT"
+          echo "comment=$COMMENT" >> "$GITHUB_OUTPUT"
+          echo "Run started by ${{ github.actor }} and approved in GitHub by $APPROVER: $COMMENT"
+  ChangeControl:
+    name: ChangeControl
+    needs: ReleaseApproval
     runs-on: ubuntu-latest
     outputs:
       change-request-number: ${{ steps.create.outputs.change-request-number }}
     steps:
-      - name: ServiceNow DevOps Change Automation
+      - name: Register release package in ServiceNow
+        uses: ServiceNow/servicenow-devops-register-package@v3.1.0
+        with:
+          instance-url: ${{ secrets.SN_INSTANCE_URL_ADEVOPS2 }}
+          tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID_ADEVOPS2 }}
+          devops-integration-token: ${{ secrets.SN_DEVOPS_TOKEN }}
+          context-github: ${{ toJSON(github) }}
+          job-name: 'ChangeControl'
+          package-name: '${{ env.APP_NAME }}-${{ env.APP_VERSION }}'
+          artifacts: '[{"name": "${{ env.APP_NAME }}.zip", "version": "${{ env.APP_VERSION }}", "semanticVersion": "${{ env.APP_VERSION }}", "repositoryName": "${{ github.repository }}"}]'
+      - name: Create change request and wait for CAB approval
         # Pinned commit for v7.1.0: ServiceNow/servicenow-devops-change@8d4494bbff87d551caf1fc2aaa28b2355dc2073a
         uses: ServiceNow/servicenow-devops-change@v7.1.0
         id: create
@@ -72,7 +141,7 @@ jobs:
           tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID_ADEVOPS2 }}
           devops-integration-token: ${{ secrets.SN_DEVOPS_TOKEN }}
           context-github: ${{ toJSON(github) }}
-          job-name: 'ProdDeploy'
+          job-name: 'ChangeControl'
           change-request: |
             {
               "setCloseCode": "true",
@@ -80,11 +149,11 @@ jobs:
               "attributes": {
                 "requested_by": { "email": "${{ inputs.requested_by_email }}" },
                 "assignment_group": "b85d44954a3623120004689b2d5dd60a",
-                "short_description": "Automated Software Deployment",
-                "description": "Automated Software Deployment. Pipeline run by ${{ github.actor }}.",
-                "implementation_plan": "Tested software is deployed automatically by the CI/CD pipeline after the change is approved, within the planned start and end window.",
-                "backout_plan": "Redeploy the previous release if the deployment fails.",
-                "test_plan": "Automated unit and integration tests run in TestingJob. Results are in the Test Summaries tab."
+                "short_description": "Deploy ${{ env.APP_NAME }} ${{ env.APP_VERSION }} to Production",
+                "description": "Automated deployment of ${{ env.APP_NAME }} ${{ env.APP_VERSION }} (commit ${{ github.sha }}). Pipeline run by ${{ github.actor }}. Approved in GitHub by ${{ needs.ReleaseApproval.outputs.approver }}: ${{ needs.ReleaseApproval.outputs.approval-comment }}",
+                "implementation_plan": "Package ${{ env.APP_NAME }}-${{ env.APP_VERSION }}.zip is checksum-verified and deployed automatically by the CI/CD pipeline after this change is approved, within the planned start and end window.",
+                "backout_plan": "Redeploy the previous registered package version if the deployment or smoke tests fail.",
+                "test_plan": "Package integrity and integration tests run in the Build job. Results are in the Test Summaries tab."
               }
             }
           interval: '100'
@@ -92,20 +161,38 @@ jobs:
           changeCreationTimeOut: '3600'
           abortOnChangeCreationFailure: true
           abortOnChangeStepTimeout: true
-      - name: Output of Change Creation
+      - name: Log change request number
         run: echo "change-request-number = ${{ steps.create.outputs.change-request-number }}"
-  FakeDeploy:
-    name: FakeDeploy
-    needs: ProdDeploy
+  Deploy:
+    name: Deploy
+    needs: ChangeControl
     runs-on: ubuntu-latest
     steps:
-      - name: Fake deployment
+      - name: Retrieve approved release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-${{ env.APP_VERSION }}
+      - name: Verify artifact checksum before deployment
+        run: sha256sum -c "${APP_NAME}-${APP_VERSION}.zip.sha256"
+      - name: Deploy release to production
         run: |
-          echo "Change ${{ needs.ProdDeploy.outputs.change-request-number }} approved - starting deployment"
-          echo "Downloading build artifact..."
+          echo "Change ${{ needs.ChangeControl.outputs.change-request-number }} approved - deploying ${APP_NAME} ${APP_VERSION}"
+          unzip -qo "${APP_NAME}-${APP_VERSION}.zip" -d deploy
           sleep 3
-          echo "Deploying to production..."
-          sleep 5
+          echo "Deployed files:" && ls -l deploy/app
           echo "Running smoke tests..."
-          sleep 2
+          grep -q "${APP_VERSION}" deploy/app/index.html && echo "Smoke test passed: version ${APP_VERSION} is live"
           echo "Deployment completed successfully"
+      - name: Publish deployment summary
+        run: |
+          {
+            echo "## Deployment Summary"
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Application | ${APP_NAME} |"
+            echo "| Version | ${APP_VERSION} |"
+            echo "| Commit | ${GITHUB_SHA} |"
+            echo "| Change Request | ${{ needs.ChangeControl.outputs.change-request-number }} |"
+            echo "| Started by | ${GITHUB_ACTOR} |"
+            echo "| Checksum | $(cut -d' ' -f1 ${APP_NAME}-${APP_VERSION}.zip.sha256) |"
+          } >> "$GITHUB_STEP_SUMMARY"
