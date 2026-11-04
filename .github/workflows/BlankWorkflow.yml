@@ -1,5 +1,8 @@
-name: BlankWorkflow
 on:
+  push:
+    branches:
+      - main
+
   workflow_dispatch:
     inputs:
       name:
@@ -147,7 +150,7 @@ jobs:
               "setCloseCode": "true",
               "autoCloseChange": true,
               "attributes": {
-                "requested_by": { "email": "${{ inputs.requested_by_email }}" },
+                "requested_by": { "email": "${{ inputs.requested_by_email || 'abel.tuter@example.com' }}" },
                 "assignment_group": "b85d44954a3623120004689b2d5dd60a",
                 "short_description": "Deploy ${{ env.APP_NAME }} ${{ env.APP_VERSION }} to Production",
                 "description": "Automated deployment of ${{ env.APP_NAME }} ${{ env.APP_VERSION }} (commit ${{ github.sha }}). Pipeline run by ${{ github.actor }}. Approved in GitHub by ${{ needs.ReleaseApproval.outputs.approver }}: ${{ needs.ReleaseApproval.outputs.approval-comment }}",
